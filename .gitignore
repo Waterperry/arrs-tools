@@ -1,0 +1,6 @@
+.idea/
+.mypy_cache/
+file_system/
+
+conv_to_files.py
+preproc.py
