@@ -1,16 +1,14 @@
 #!/usr/bin/env python3.11
 
-import time
-import requests
-from typing import Optional
 import os
 from sys import exit
+import time
 
-from requests import Response
+import requests
 
 
 def get_connection_info() -> tuple[dict[str, str], str]:
-    initial_response: Response = requests.get("https://arrs.host/")
+    initial_response: requests.Response = requests.get("https://arrs.host/")
     php_sess_dict: dict[str, str] = dict(initial_response.cookies)
     csrf_token = [x for x in initial_response.content.decode().split("\n")
                   if "value" in x][0].split("\"")[7]
@@ -21,8 +19,8 @@ def send_command(
         command: str,
         csrf_token: str,
         php_sess_id: dict[str, str]
-) -> Response:
-    response: Response = requests.post(
+) -> requests.Response:
+    response: requests.Response = requests.post(
             "https://arrs.host/ajax.php",
             cookies=php_sess_id,
             data={
@@ -34,7 +32,7 @@ def send_command(
     return response
 
 
-def get_and_preprocess_input() -> Optional[str]:
+def get_and_preprocess_input() -> str | None:
     try:
         cmd: str = input("ARRS > ")
     except KeyboardInterrupt:
@@ -51,11 +49,11 @@ def main():
 
     while True:
         time.sleep(4)  # Remove this if you like getting ARRS rate limited!
-        cmd: Optional[str] = get_and_preprocess_input()
+        cmd: str | None = get_and_preprocess_input()
         if cmd is None:
             continue
 
-        arrs_res: Response = send_command(cmd, csrf_token, php_sess_id)
+        arrs_res: requests.Response = send_command(cmd, csrf_token, php_sess_id)
 
         try:  # try to convert it to json and slap a newline at each breakpoint
             print("\n".join(arrs_res.json()["message"].split("<br />")[1:]))

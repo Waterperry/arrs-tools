@@ -1,13 +1,21 @@
 #!/usr/bin/env python3.11
 
+import os
 import re
-from arrs_shell import *
+import time
 
-# USAGE: make a file one directory up from this repository called "credentials.txt"
-#           The contents of this file should be lines formatted like "username password"
-#           This script will then dump all files/notes into a filesystem-like structure at ../file_system
+import requests
+
+from arrs_shell import get_connection_info, send_command
+
+# USAGE: set credential file to a file containing lines of the form "username password" for all known users.
+#   Then, run the script, and it will populate ../file_system (or custom dir) with all users' files/notes
+#   Change custom parameters using CREDENTIAL_FILE=../credentials.txt FILESYSTEM=../file_system ./export_all_info.py
 
 # Global variables
+CREDENTIAL_FILE: str = os.getenv("CREDENTIAL_FILE", "../credentials.txt")
+FILESYSTEM: str = os.getenv("FILESYSTEM", "../file_system")
+
 php_sess_id, csrf_token = get_connection_info()
 debug: bool = True
 do_preprocessing: bool = False
@@ -18,7 +26,9 @@ def execute(cmd: str) -> list[str]:
     if debug:
         print(f"[DEBUG] Execute: {cmd}")
 
-    working_response: requests.Response = send_command(f"{cmd}", csrf_token, php_sess_id)
+    working_response: requests.Response = send_command(
+        f"{cmd}", csrf_token, php_sess_id
+    )
     try:
         response = working_response.json()["message"].split("<br />")[1:]
     except requests.exceptions.JSONDecodeError:
@@ -34,23 +44,29 @@ def preprocess_line(line: str) -> str:
     if not do_preprocessing:
         return line
 
-    new_line = re.sub(r'<.*?>', '\n', line)
-    line2 = new_line.replace('&nbsp;', ' ')
-    half_fixed = line2.replace('&lt;', '<')
-    fixed = half_fixed.replace('&gt;', '>')
+    new_line = re.sub(r"<.*?>", "\n", line)
+    line2 = new_line.replace("&nbsp;", " ")
+    half_fixed = line2.replace("&lt;", "<")
+    fixed = half_fixed.replace("&gt;", ">")
     return fixed
 
 
 def get_creds() -> list[tuple[str, str]]:
     creds: list[tuple[str, str]] = []
-    with open("../credentials.txt", "r") as f:
+    if not os.path.exists(CREDENTIAL_FILE):
+        print(f"Credential file {CREDENTIAL_FILE} not found.")
+        exit(0)
+
+    with open(CREDENTIAL_FILE, "r") as f:
         lines: list[str] = f.readlines()
         for line in lines:
             try:
                 cred_user, cred_pass = line.strip("\n").split(" ")
                 creds.append((cred_user, cred_pass))
             except ValueError:
-                print(f"Badly formatted line: {line}\nCheck spacings in the line. Continuing.")
+                print(
+                    f"Badly formatted line: {line}\nCheck spacings in the line. Continuing."
+                )
 
     return creds
 
@@ -121,23 +137,25 @@ def main():
     creds: list[tuple[str, str]] = get_creds()
     # make root directory
     try:
-        os.mkdir("file_system")
+        os.mkdir(FILESYSTEM)
     except FileExistsError:
         pass
 
-    os.chdir("./file_system")
+    os.chdir(FILESYSTEM)
 
     for cred_user, cred_pass in creds:
         print(f"Beginning pass on user {cred_user}")
         creation_success = make_directory_structure(cred_user)
         if not creation_success:
-            print(f"Data already exists for {cred_user}. Delete the directory if incomplete.")
+            print(
+                f"Data already exists for {cred_user}. Delete the directory if incomplete."
+            )
             continue
 
         execute("logout")
         execute(f"login {cred_user}")
         res = execute(f"{cred_pass}")
-        if res and ('error' in res[0] or 'ERROR' in res[0]):
+        if res and ("error" in res[0] or "ERROR" in res[0]):
             print(f"Auth failed on user {cred_user}")
             continue
 
@@ -152,5 +170,5 @@ def main():
         os.chdir("../../")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
